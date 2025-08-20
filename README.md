@@ -27,15 +27,6 @@ npm start
 ...
 ```
 
-## 目录
-```
-src/
-  engine.ts       # PriceEngine：submitOrder + settleTick
-  types.ts        # 基础类型
-  bot.ts          # Bot 容器：冷却、仓位限制、下单提交
-  strategies.ts   # SmaCross / MeanRevert / Random 策略
-  main.ts         # Tick 循环：把一切连起来
-```
 
 ## 参数说明（engine）
 - `k`：价格灵敏度（0.1~0.5）
@@ -45,7 +36,132 @@ src/
 - `feeTrade`：每次下单的固定手续费
 - `priceFloor`：价格下限，防归零
 
-## 下一步
-- 把 `TickResult` 用 WebSocket 推送给前端折线图
-- 加入报名费/奖池/结算（链上或 off-chain）
-- 给策略提供“消息情绪”输入，形成“信息→价格”的闭环
+# REST API
+
+## 1) 添加/投放 Bot
+
+```bash
+POST /match/agents
+```
+
+**Request Body**
+
+```json
+{
+  "botId": "user-bot-1",
+  "strategyKind": "informative",
+  "strategyParams": { "lookback": 25, "z": 1.0, "size": 2 },
+  "maxPos": 20,
+  "limits": { "maxPerTick": 2, "cooldown": 1 }
+}
+```
+
+-   `botId`：字符串，唯一标识一个 bot。
+    
+-   `strategyKind`：见上文 StrategyKind。
+    
+-   `strategyParams`：该策略的参数对象（不同策略参数字段不同，见下“常见 strategyParams”）。
+    
+-   `maxPos`：仓位上限（绝对值）。
+    
+-   `limits.maxPerTick`：单 tick 最大下单量。
+    
+-   `limits.cooldown`：冷却 tick 数（最短多少 tick 才能再下单）。
+    
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+> 说明：当前实现未返回错误码；若想避免重复 `botId`，建议在后端 `addAgent` 返回 `false` 时回 409（改造点，非现状）。
+
+---
+
+## 2) 获取对局快照
+
+```sql
+GET /match/snapshot
+```
+
+**Response（示例）**
+
+```json
+{
+  "tick": 0,
+  "price": 100,
+  "bots": ["cons-1","aggr-1","chaos-1","info-1","cons-2"],
+  "historyLen": 1
+}
+```
+
+---
+
+## 3) 控制对局（开始/暂停/重置）
+
+### 开始（或恢复）
+
+```lua
+POST /match/resume
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+### 暂停
+
+```bash
+POST /match/pause
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+### 重置
+
+```bash
+POST /match/reset
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+> 注意：**重置会清空所有已在盘内的 bot**，并重新初始化价格与历史。当前代码中 `reset()` 不会自动重新投放默认 5 个 bot；如需“重置后仍带默认 bot”，需要在 `reset()` 中补回默认种子或在 `/match/reset` 处理里重新投放（这是一个可选的后端改造点）。
+
+---
+
+# WebSocket
+
+-   **URL**：`ws://localhost:3000/ws`
+    
+-   **协议**：无自定义子协议
+    
+-   **消息方向**：服务器 → 客户端（推送 tick 数据）
+    
+-   **客户端无需发送订阅消息**，连接即开始接收。
+    
+
+**浏览器端示例**
+
+```js
+const ws = new WebSocket("ws://localhost:3000/ws");
+
+ws.onopen = () => console.log("WS connected");
+ws.onmessage = (ev) => {
+  const tick = JSON.parse(ev.data);
+  // { tick, price, buyVol, sellVol, net, announcements: [...] }
+  console.log("TICK:", tick);
+};
+ws.onclose = () => console.log("WS closed");
+ws.onerror = (e) => console.error("WS error", e);
+```

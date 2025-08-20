@@ -27,8 +27,10 @@ export interface TickResult {
 export interface MarketCtx {
   tick: number;
   price: number;
-  history: number[]; // includes latest price
+  history: number[];
+  announcements: Announcement[]; 
 }
+
 
 export interface Decision {
   side: Side;
@@ -38,6 +40,7 @@ export interface Decision {
 
 export interface Strategy {
   decide(ctx: MarketCtx): Decision | null;
+  announce?(ctx: MarketCtx): Announce | null; // ← 可选
 }
 
 export interface Wallet {
@@ -48,4 +51,25 @@ export interface Wallet {
 export interface BotLimits {
   maxPerTick: number;
   cooldown: number;
+}
+
+// ✅ 新增：立场与公告
+export type Stance = "BULL" | "BEAR" | "NEUTRAL";
+
+export interface Announcement {
+  tick: number;
+  agentId: string;
+  text: string;
+  stance: Stance;
+}
+
+export interface Announce { // 策略用来发公告
+  text: string;
+  stance: Stance;
+}
+
+export interface OutgoingAnnouncement {
+  agentId: string;
+  text: string;
+  stance: Stance;
 }

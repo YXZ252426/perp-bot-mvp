@@ -6,11 +6,20 @@ import { MessageHub } from "./message";
 import { BotLimits, MarketCtx, Wallet } from "./types";
 import { makeStrategy } from "./strategyFactory";
 
+export interface BotSeed {
+  botId: string;
+  strategyKind: string;
+  strategyParams?: any;
+  maxPos?: number;
+  limits?: BotLimits;
+}
+
 export interface MatchConfig {
   tickMs: number;
   annWindow: number;
   engineParams: ConstructorParameters<typeof PriceEngine>[0];
   initialPrice?: number;
+  defaultBots?: BotSeed[];
 }
 
 export class SingleMatch extends EventEmitter {
@@ -18,6 +27,7 @@ export class SingleMatch extends EventEmitter {
   private hub = new MessageHub();
   private history: number[] = [];
   private bots: Bot[] = [];
+  private botIds = new Set<string>(); // ✅ 防重复
   private tick = 0;
   private timer: NodeJS.Timeout | null = null;
 
@@ -25,11 +35,32 @@ export class SingleMatch extends EventEmitter {
     super();
     this.engine = new PriceEngine(cfg.engineParams, cfg.initialPrice ?? 100);
     this.history = [this.engine.price];
+
+    // ✅ 构造时自动投放默认 bots
+    if (cfg.defaultBots?.length) {
+      for (const seed of cfg.defaultBots) {
+        this.addAgent(
+          seed.botId,
+          seed.strategyKind,
+          seed.strategyParams ?? {},
+          seed.maxPos ?? 20,
+          seed.limits ?? { maxPerTick: 2, cooldown: 1 }
+        );
+      }
+    }
   }
 
-  /** 前端“选择 agent 进场” => 调这个 */
-  addAgent(botId: string, strategyKind: string, strategyParams: any,
-           maxPos = 20, limits: BotLimits = { maxPerTick: 2, cooldown: 1 }) {
+  /** 选择 agent 进场 */
+  addAgent(
+    botId: string,
+    strategyKind: string,
+    strategyParams: any,
+    maxPos = 20,
+    limits: BotLimits = { maxPerTick: 2, cooldown: 1 }
+  ) {
+    // ✅ 同名 bot 防重
+    if (this.botIds.has(botId)) return false;
+
     const wallet: Wallet = { maxPosition: maxPos, position: 0 };
     const strategy = makeStrategy(strategyKind, strategyParams);
     const bot = new Bot(
@@ -41,6 +72,8 @@ export class SingleMatch extends EventEmitter {
       (ann) => this.hub.post(ann, this.tick)
     );
     this.bots.push(bot);
+    this.botIds.add(botId);
+    return true;
   }
 
   start() {

@@ -1,5 +1,7 @@
 import { Strategy } from "./types";
 import { ConservativeStrategy, AggressiveStrategy, ChaoticStrategy, InformativeStrategy } from "./strategies";
+import { AIClient } from "./aiClient";
+import { AIAnnouncer } from "./strategies/aiAnnouncer";
 
 export function makeStrategy(kind: string, p: any): Strategy {
   switch (kind) {
@@ -7,6 +9,16 @@ export function makeStrategy(kind: string, p: any): Strategy {
     case "aggressive":   return new AggressiveStrategy(  p?.fast ?? 5, p?.slow ?? 20, p?.size ?? 3,  p?.band ?? 0.001 );
     case "chaotic":      return new ChaoticStrategy(     p?.size ?? 2, p?.tradeProb ?? 0.35);
     case "informative":  return new InformativeStrategy( p?.lookback ?? 30, p?.z ?? 1.1, p?.size ?? 2);
+    case "ai_announcer": {
+    const client = new AIClient(
+      p?.base ?? "http://127.0.0.1:9933",
+      p?.timeoutMs ?? 200,
+      p?.maxFailures ?? 5,
+      p?.breakMs ?? 10_000,
+      p?.staleTicks ?? 8
+      );
+      return new AIAnnouncer(client, p?.thinkEvery ?? 6, p?.speakEvery ?? 12);
+    }
     default:             return new ConservativeStrategy(); // 兜底
   }
 }

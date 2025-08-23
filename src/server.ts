@@ -12,6 +12,8 @@ const defaultBots = [
   { botId: "chaos-1", strategyKind: "chaotic",      strategyParams: {} },
   { botId: "info-1",  strategyKind: "informative",  strategyParams: {} },
   { botId: "cons-2",  strategyKind: "conservative", strategyParams: { fast:10, slow:40 } },
+  { botId: "ai-1", strategyKind: "ai_announcer",
+    strategyParams: { base: "http://127.0.0.1:9933", timeoutMs: 200, thinkEvery: 6, speakEvery: 12 } },
 ];
 
 

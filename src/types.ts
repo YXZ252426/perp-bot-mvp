@@ -73,3 +73,12 @@ export interface OutgoingAnnouncement {
   text: string;
   stance: Stance;
 }
+
+// 服务端返回的 AI 公告响应
+export interface AIResponse {
+  announce?: Announce; // 对应 { text, stance }
+  tick?: number;
+  telemetry?: {
+    latency_ms: number;
+  };
+}

@@ -35,6 +35,12 @@ app.post("/match/agents", (req, res) => {
 
 // 快照
 app.get("/match/snapshot", (_req, res) => res.json(match.snapshot()));
+// 排行榜（默认前 10）
+app.get("/match/leaderboard", (req, res) => {
+  const n = Number(req.query.n ?? 10);
+  res.json(match.leaderboard(isNaN(n) ? 10 : n));
+});
+
 
 // 控制接口
 app.post("/match/pause", (_req, res) => { match.pause(); res.json({ ok: true }); });

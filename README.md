@@ -138,6 +138,89 @@ POST /match/reset
 
 > 注意：**重置会清空所有已在盘内的 bot**，并重新初始化价格与历史。当前代码中 `reset()` 不会自动重新投放默认 5 个 bot；如需“重置后仍带默认 bot”，需要在 `reset()` 中补回默认种子或在 `/match/reset` 处理里重新投放（这是一个可选的后端改造点）。
 
+
+
+## 4). 获取排行榜
+
+**Endpoint**
+
+```sql
+GET /match/leaderboard
+```
+
+**描述**  
+获取交易比赛的排行榜数据，按 `equity`（总权益）降序排列。
+
+**请求参数（Query）**
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| n | number | 否 | 10 | 返回前 n 名排行榜数据 |
+
+**响应格式（JSON Array）**  
+返回一个数组，每个元素表示一个参赛账户。
+
+**字段说明**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | string | 账户或机器人 ID |
+| equity | number | 总权益（= 初始资金 + 已实现收益 + 未实现收益 - 手续费） |
+| realized | number | 已实现收益（已经锁定的盈亏） |
+| volume | number | 累计成交量 |
+
+---
+
+## 2\. 响应示例
+
+**请求**
+
+```sql
+GET /match/leaderboard?n=5
+```
+
+**响应**
+
+```json
+[
+  {
+    "id": "botA",
+    "equity": 78.5,
+    "realized": 20.0,
+    "volume": 15
+  },
+  {
+    "id": "botB",
+    "equity": 55.0,
+    "realized": 50.0,
+    "volume": 8
+  }
+]
+```
+
+---
+
+## 3\. 前端展示推荐
+
+前端表格可以展示如下字段：
+
+-   **排名 Rank**（前端根据数组顺序生成 1, 2, 3...）
+    
+-   **ID**（`id`）
+    
+-   **总权益 Equity**（`equity`）
+    
+-   **已实现收益 Realized**（`realized`）
+    
+-   **成交量 Volume**（`volume`）
+    
+
+| Rank | ID | Equity | Realized | Volume |
+| --- | --- | --- | --- | --- |
+| 1 | botA | 78.5 | 20.0 | 15 |
+| 2 | botB | 55.0 | 50.0 | 8 |
+
+---
 ---
 
 # WebSocket

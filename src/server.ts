@@ -24,7 +24,7 @@ const defaultBots = [
 
 // 初始化唯一的盘（先投放默认 5 个 bot，但不 start）
 const match = new SingleMatch({
-  tickMs: 3000,
+  tickMs: 1500,
   annWindow: 30,
   engineParams: { k: 0.25, L: 2000, lambda: 0.03, sigmaNoise: 0.004, feeTrade: 0.02, priceFloor: 0.01 },
   initialPrice: 100,

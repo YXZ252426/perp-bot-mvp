@@ -24,6 +24,17 @@ export interface MatchConfig {
   initialCapitalPerBot?: number;   // ← 每个 bot 初始资金（用来算 equity）
 }
 
+function sample<T>(arr: T[], k: number): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, Math.max(0, Math.min(k, a.length)));
+}
+
+type OrderMini = { side: Side; size: number };
+type CartelState = { leaderId: string; followers: Set<string>; untilTick: number };
 export class SingleMatch extends EventEmitter {
   private engine: PriceEngine;
   private hub = new MessageHub();
@@ -33,6 +44,8 @@ export class SingleMatch extends EventEmitter {
   private tick = 0;
   private timer: NodeJS.Timeout | null = null;
   private books = new Map<string, PnLBook>();
+  private lastOrders = new Map<string, OrderMini>(); // 本 tick 记录各 bot 的最终下单
+  private cartel: CartelState | null = null;         // 当前唯一的“拉盘/砸盘”协同
 
   constructor(private cfg: MatchConfig) {
     super();
@@ -99,6 +112,19 @@ export class SingleMatch extends EventEmitter {
     return true;
   }
 
+    /** 发起协同（拉盘/砸盘按钮） */
+  startCartel(leaderId: string, nFollowers = 3, durationTicks = 20) {
+    if (!this.botIds.has(leaderId)) return null;
+    // 随机抽取跟随者
+    const candidates = this.bots.map(b => b.id).filter(id => id !== leaderId);
+    const picked = new Set(sample(candidates, nFollowers));
+    this.cartel = { leaderId, followers: picked, untilTick: this.tick + Math.max(1, durationTicks) };
+    return { leaderId, followers: [...picked], untilTick: this.cartel.untilTick };
+  }
+
+  /** 提前结束协同 */
+  stopCartel() { this.cartel = null; }
+
   /** 排行榜（按 equity 降序） */
   leaderboard(topN = 10) {
     const price = this.engine.price;
@@ -112,6 +138,9 @@ export class SingleMatch extends EventEmitter {
   start() {
     if (this.timer) return;
     this.timer = setInterval(() => {
+      // 过期自动关闭
+      if (this.cartel && this.tick >= this.cartel.untilTick) this.cartel = null;
+
       const anns = this.hub.recent(this.tick, this.cfg.annWindow);
       const ctx: MarketCtx = {
         tick: this.tick,
@@ -120,13 +149,42 @@ export class SingleMatch extends EventEmitter {
         announcements: anns,
       };
 
-      // 机器人先可能 announce，再下单
-      this.bots.forEach(b => b.onTick(ctx));
+      // 每 tick 开头清空“最终单”记录
+      this.lastOrders.clear();
 
+      if (this.cartel) {
+        const leader = this.bots.find(b => b.id === this.cartel!.leaderId);
+        const followers = this.cartel!.followers;
+
+        // 1) 让领头 bot 先跑（产生自己的最终单）
+        leader?.onTick(ctx);
+
+        // 2) 复制领头的“最终单”给跟随者（若领头没下单，则不复制）
+        const ord = this.lastOrders.get(this.cartel.leaderId);
+        if (ord) {
+          this.bots.forEach(b => {
+            if (followers.has(b.id)) {
+              b.followOrder(ord, this.tick);
+            }
+          });
+        }
+
+        // 3) 其他非跟随、非领头 bot 正常运行
+        this.bots.forEach(b => {
+          if (b.id === this.cartel!.leaderId) return;
+          if (followers.has(b.id)) return;
+          b.onTick(ctx);
+        });
+      } else {
+        // 无协同时：全体正常运行
+        this.bots.forEach(b => b.onTick(ctx));
+      }
+
+      // 结算
       const res = this.engine.settleTick();
       this.history.push(res.price);
 
-      // ✅ 推送给前端（WS）：附带前 5 名排行榜
+      // 推送（可附上当前协同信息与排行榜）
       this.emit("tick", {
         tick: res.tick,
         price: res.price,
@@ -134,6 +192,11 @@ export class SingleMatch extends EventEmitter {
         sellVol: res.sellVol,
         net: res.netFlow,
         announcements: anns,
+        cartel: this.cartel ? {
+          leaderId: this.cartel.leaderId,
+          followers: [...this.cartel.followers],
+          ticksLeft: Math.max(0, this.cartel.untilTick - (this.tick + 1)),
+        } : null,
         top: this.leaderboard(5),
       });
 
@@ -148,10 +211,12 @@ export class SingleMatch extends EventEmitter {
   reset() {
     this.pause();
     this.bots = [];
-    this.botIds.clear();              // ✅ 清空已注册 botId
-    this.books.clear();               // ✅ 清空账本
+    this.botIds.clear();
+    this.books.clear();
     this.hub = new MessageHub();
     this.tick = 0;
+    this.cartel = null;
+    this.lastOrders.clear();
     this.engine = new PriceEngine(this.cfg.engineParams, this.cfg.initialPrice ?? 100);
     this.history = [this.engine.price];
   }
@@ -162,7 +227,12 @@ export class SingleMatch extends EventEmitter {
       price: this.engine.price,
       bots: this.bots.map(b => b.id),
       historyLen: this.history.length,
-      top: this.leaderboard(5),       // ✅ 快照里也带前 5
+      cartel: this.cartel ? {
+        leaderId: this.cartel.leaderId,
+        followers: [...this.cartel.followers],
+        ticksLeft: Math.max(0, this.cartel.untilTick - this.tick),
+      } : null,
+      top: this.leaderboard(5),
     };
   }
 }

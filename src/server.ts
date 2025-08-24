@@ -52,6 +52,20 @@ app.post("/match/pause", (_req, res) => { match.pause(); res.json({ ok: true });
 app.post("/match/resume", (_req, res) => { match.start(); res.json({ ok: true }); });
 app.post("/match/reset", (_req, res) => { match.reset(); res.json({ ok: true }); });
 
+// src/server.ts（新增路由）
+app.post("/match/cartel/start", (req, res) => {
+  const { leaderId, nFollowers, durationTicks } = req.body || {};
+  const started = match.startCartel(String(leaderId), Number(nFollowers ?? 3), Number(durationTicks ?? 20));
+  if (!started) return res.status(400).json({ ok:false, error:"LEADER_NOT_FOUND" });
+  res.json({ ok:true, ...started });
+});
+
+app.post("/match/cartel/stop", (_req, res) => {
+  match.stopCartel();
+  res.json({ ok:true });
+});
+
+
 // 启动 HTTP
 const server = app.listen(3000, () => console.log("http://localhost:3000"));
 

@@ -38,4 +38,18 @@ export class Bot {
     this.wallet.position = nextPos;
     this.lastTradeTick = ctx.tick;
   }
+
+  followOrder(order: { side: Side; size: number }, tick: number): boolean {
+    if (tick - this.lastTradeTick < this.limits.cooldown) return false;
+    const size = Math.min(Math.abs(order.size), this.limits.maxPerTick);
+    if (size <= 0) return false;
+
+    const nextPos = this.wallet.position + (order.side === "BUY" ? size : -size);
+    if (Math.abs(nextPos) > this.wallet.maxPosition) return false;
+
+    this.submitOrder({ agentId: this.id, side: order.side, size });
+    this.wallet.position = nextPos;
+    this.lastTradeTick = tick;
+    return true;
+  }
 }

@@ -220,8 +220,61 @@ GET /match/leaderboard?n=5
 | 1 | botA | 78.5 | 20.0 | 15 |
 | 2 | botB | 55.0 | 50.0 | 8 |
 
+
+## 4\. 发起协同（拉盘/砸盘）
+
+**POST** `/match/cartel/start`
+
+### 请求参数（JSON Body）
+
+```json
+{
+  "leaderId": "user-bot-1",   // 发起协同的用户 bot ID
+  "nFollowers": 3,            // 随机挑选的跟随者数量
+  "durationTicks": 20         // 协同持续的 tick 数
+}
+```
+
+### 响应示例
+
+```json
+{
+  "ok": true,
+  "leaderId": "user-bot-1",
+  "followers": ["cons-1", "aggr-1", "rand-1"],
+  "untilTick": 240
+}
+```
+
+说明：
+
+-   `leaderId`：本次协同的发起者。
+    
+-   `followers`：被随机挑选出的跟随 bot 列表。
+    
+-   `untilTick`：协同结束的 tick 编号（到点自动失效）。
+    
+
 ---
+
+## 5\. 提前结束协同
+
+**POST** `/match/cartel/stop`
+
+### 请求参数
+
+无（body 可为空）。
+
+### 响应示例
+
+```json
+{
+  "ok": true
+}
+```
+
 ---
+
 
 # WebSocket
 
